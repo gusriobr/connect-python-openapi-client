@@ -1,64 +1,16 @@
 import copy
 
-from cnct.client.utils import get_values, parse_content_range, resolve_attribute
+from cnct.client.models.iterables import (
+    AsyncResourceIterable,
+    AsyncValuesListIterable,
+    ResourceIterable,
+    ValuesListIterable,
+)
+from cnct.client.utils import parse_content_range, resolve_attribute
 from cnct.rql import R
 
 
-class AbstractIterable:
-    def __init__(self, client, path, query, config, **kwargs):
-        self._client = client
-        self._path = path
-        self._query = query
-        self._config = config
-        self._kwargs = kwargs
-
-    def get_item(self, item):
-        raise NotImplementedError('get_item must be implemented in subclasses.')
-
-    def __iter__(self):
-        cr = None
-        results = None
-        while cr is None or cr.last < cr.count - 1:
-            try:
-                results, cr = self._execute_request()
-            except StopIteration:
-                pass
-
-            if not results:
-                return
-
-            for item in results:
-                yield self.get_item(item)
-
-            if not cr:
-                # endpoint doesn't support pagination
-                return
-            self._config['params']['offset'] += self._config['params']['limit']
-
-    def _execute_request(self):
-        results = self._client.get(
-            f'{self._path}?{self._query}',
-            **self._config,
-        )
-        content_range = parse_content_range(
-            self._client.response.headers.get('Content-Range'),
-        )
-        return results, content_range
-
-
-class ResourceIterable(AbstractIterable):
-
-    def get_item(self, item):
-        return item
-
-
-class ValuesListIterable(AbstractIterable):
-
-    def get_item(self, item):
-        return get_values(item, self._kwargs['fields'])
-
-
-class ResourceSet:
+class ResourceSetBase:
     """
     Represent a set of resources.
     """
@@ -95,72 +47,6 @@ class ResourceSet:
     @property
     def content_range(self):
         return self._content_range
-
-    def __iter__(self):
-        """
-        Returns an iterator to iterate over the set of resources.
-
-        :return: A resources iterator.
-        :rtype: ResourceSet
-        """
-        if self._results is None:
-            return self._iterator()
-        return iter(self._results)
-
-    def __bool__(self):
-        """
-        Return True if the ResourceSet contains at least a resource
-        otherwise return False.
-
-        :return: True if contains a resource otherwise False.
-        :rtype: bool
-        """
-        self._fetch_all()
-        return bool(self._results)
-
-    def __getitem__(self, key):
-        """
-        If called with and integer index, returns the item
-        at index ``key``.
-
-        If key is a slice, set the pagination limit and offset
-        accordingly.
-
-        :param key: index or slice.
-        :type key: int, slice
-        :raises TypeError: If ``key`` is neither an integer nor a slice.
-        :return: The resource at index ``key`` or self if ``key`` is a slice.
-        :rtype: dict, ResultSet
-        """
-        if not isinstance(key, (int, slice)):
-            raise TypeError('ResourceSet indices must be integers or slices.')
-
-        if isinstance(key, slice) and (key.start is None or key.stop is None):
-            raise ValueError('Both start and stop indexes must be specified.')
-
-        if (not isinstance(key, slice) and (key < 0)) or (
-            isinstance(key, slice) and (key.start < 0 or key.stop < 0)
-        ):
-            raise ValueError('Negative indexing is not supported.')
-
-        if isinstance(key, slice) and not (key.step is None or key.step == 0):
-            raise ValueError('Indexing with step is not supported.')
-
-        if self._results:
-            return self._results[key]
-
-        if isinstance(key, int):
-            copy = self._copy()
-            copy._limit = 1
-            copy._offset = key
-            copy._fetch_all()
-            return copy._results[0] if copy._results else None
-
-        copy = self._copy()
-        copy._offset = key.start
-        copy._limit = key.stop - key.start
-        copy._slice = True
-        return copy
 
     def configure(self, **kwargs):
         """
@@ -271,31 +157,6 @@ class ResourceSet:
 
         return copy
 
-    def count(self):
-        """
-        Returns the total number of resources within this ResourceSet object.
-
-        :return: The total number of resources present.
-        :rtype: int
-        """
-        if not self._content_range:
-            url = self._get_request_url()
-            kwargs = self._get_request_kwargs()
-            kwargs['params']['limit'] = 0
-            self._execute_request(url, kwargs)
-        return self._content_range.count
-
-    def first(self):
-        """
-        Returns the first resource that belongs to this ResourceSet object
-        or None if the ResourceSet doesn't contains resources.
-
-        :return: The first resource.
-        :rtype: dict, None
-        """
-        self._fetch_all()
-        return self._results[0] if self._results else None
-
     def all(self):
         """
         Returns a copy of the current ResourceSet.
@@ -370,19 +231,6 @@ class ResourceSet:
 
         return url
 
-    def _iterator(self):
-        args = (
-            self._client,
-            self._path,
-            self._build_qs(),
-            self._get_request_kwargs(),
-        )
-        iterable = (
-            ValuesListIterable(*args, fields=self._fields)
-            if self._fields else ResourceIterable(*args)
-        )
-        return iter(iterable)
-
     def _get_request_kwargs(self):
         config = copy.deepcopy(self._config)
         config.setdefault('params', {})
@@ -396,6 +244,122 @@ class ResourceSet:
             config['params']['search'] = self._search
 
         return config
+
+    def help(self):
+        """
+        Output the ResourceSet documentation to the console.
+
+        :return: self
+        :rtype: ResourceSet
+        """
+        self._client.print_help(self)
+        return self
+
+
+class ResourceSetMixin:
+    def __iter__(self):
+        """
+        Returns an iterator to iterate over the set of resources.
+
+        :return: A resources iterator.
+        :rtype: ResourceSet
+        """
+        if self._results is None:
+            return self._iterator()
+        return iter(self._results)
+
+    def __bool__(self):
+        """
+        Return True if the ResourceSet contains at least a resource
+        otherwise return False.
+
+        :return: True if contains a resource otherwise False.
+        :rtype: bool
+        """
+        self._fetch_all()
+        return bool(self._results)
+
+    def __getitem__(self, key):
+        """
+        If called with and integer index, returns the item
+        at index ``key``.
+
+        If key is a slice, set the pagination limit and offset
+        accordingly.
+
+        :param key: index or slice.
+        :type key: int, slice
+        :raises TypeError: If ``key`` is neither an integer nor a slice.
+        :return: The resource at index ``key`` or self if ``key`` is a slice.
+        :rtype: dict, ResultSet
+        """
+        if not isinstance(key, (int, slice)):
+            raise TypeError('ResourceSet indices must be integers or slices.')
+
+        if isinstance(key, slice) and (key.start is None or key.stop is None):
+            raise ValueError('Both start and stop indexes must be specified.')
+
+        if (not isinstance(key, slice) and (key < 0)) or (
+            isinstance(key, slice) and (key.start < 0 or key.stop < 0)
+        ):
+            raise ValueError('Negative indexing is not supported.')
+
+        if isinstance(key, slice) and not (key.step is None or key.step == 0):
+            raise ValueError('Indexing with step is not supported.')
+
+        if self._results:
+            return self._results[key]
+
+        if isinstance(key, int):
+            copy = self._copy()
+            copy._limit = 1
+            copy._offset = key
+            copy._fetch_all()
+            return copy._results[0] if copy._results else None
+
+        copy = self._copy()
+        copy._offset = key.start
+        copy._limit = key.stop - key.start
+        copy._slice = True
+        return copy
+
+    def count(self):
+        """
+        Returns the total number of resources within this ResourceSet object.
+
+        :return: The total number of resources present.
+        :rtype: int
+        """
+        if not self._content_range:
+            url = self._get_request_url()
+            kwargs = self._get_request_kwargs()
+            kwargs['params']['limit'] = 0
+            self._execute_request(url, kwargs)
+        return self._content_range.count
+
+    def first(self):
+        """
+        Returns the first resource that belongs to this ResourceSet object
+        or None if the ResourceSet doesn't contains resources.
+
+        :return: The first resource.
+        :rtype: dict, None
+        """
+        self._fetch_all()
+        return self._results[0] if self._results else None
+
+    def _iterator(self):
+        args = (
+            self._client,
+            self._path,
+            self._build_qs(),
+            self._get_request_kwargs(),
+        )
+        iterable = (
+            ValuesListIterable(*args, fields=self._fields)
+            if self._fields else ResourceIterable(*args)
+        )
+        return iter(iterable)
 
     def _execute_request(self, url, kwargs):
         results = self._client.get(url, **kwargs)
@@ -421,12 +385,140 @@ class ResourceSet:
 
         return rs
 
-    def help(self):
-        """
-        Output the ResourceSet documentation to the console.
 
-        :return: self
+class AsyncResourceSetMixin:
+    def __aiter__(self):
+        """
+        Returns an iterator to iterate over the set of resources.
+
+        :return: A resources iterator.
         :rtype: ResourceSet
         """
-        self._client.print_help(self)
-        return self
+        if self._results is None:
+            return self._iterator()
+        return iter(self._results)
+
+    async def __bool__(self):
+        """
+        Return True if the ResourceSet contains at least a resource
+        otherwise return False.
+
+        :return: True if contains a resource otherwise False.
+        :rtype: bool
+        """
+        await self._fetch_all()
+        return bool(self._results)
+
+    async def __getitem__(self, key):
+        """
+        If called with and integer index, returns the item
+        at index ``key``.
+
+        If key is a slice, set the pagination limit and offset
+        accordingly.
+
+        :param key: index or slice.
+        :type key: int, slice
+        :raises TypeError: If ``key`` is neither an integer nor a slice.
+        :return: The resource at index ``key`` or self if ``key`` is a slice.
+        :rtype: dict, ResultSet
+        """
+        if not isinstance(key, (int, slice)):
+            raise TypeError('ResourceSet indices must be integers or slices.')
+
+        if isinstance(key, slice) and (key.start is None or key.stop is None):
+            raise ValueError('Both start and stop indexes must be specified.')
+
+        if (not isinstance(key, slice) and (key < 0)) or (
+            isinstance(key, slice) and (key.start < 0 or key.stop < 0)
+        ):
+            raise ValueError('Negative indexing is not supported.')
+
+        if isinstance(key, slice) and not (key.step is None or key.step == 0):
+            raise ValueError('Indexing with step is not supported.')
+
+        if self._results:
+            return self._results[key]
+
+        if isinstance(key, int):
+            copy = self._copy()
+            copy._limit = 1
+            copy._offset = key
+            await copy._fetch_all()
+            return copy._results[0] if copy._results else None
+
+        copy = self._copy()
+        copy._offset = key.start
+        copy._limit = key.stop - key.start
+        copy._slice = True
+        return copy
+
+    async def count(self):
+        """
+        Returns the total number of resources within this ResourceSet object.
+
+        :return: The total number of resources present.
+        :rtype: int
+        """
+        if not self._content_range:
+            url = self._get_request_url()
+            kwargs = self._get_request_kwargs()
+            kwargs['params']['limit'] = 0
+            await self._execute_request(url, kwargs)
+        return self._content_range.count
+
+    async def first(self):
+        """
+        Returns the first resource that belongs to this ResourceSet object
+        or None if the ResourceSet doesn't contains resources.
+
+        :return: The first resource.
+        :rtype: dict, None
+        """
+        await self._fetch_all()
+        return self._results[0] if self._results else None
+
+    def _iterator(self):
+        args = (
+            self._client,
+            self._path,
+            self._build_qs(),
+            self._get_request_kwargs(),
+        )
+        iterable = (
+            AsyncValuesListIterable(*args, fields=self._fields)
+            if self._fields else AsyncResourceIterable(*args)
+        )
+        return iter(iterable)
+
+    async def _execute_request(self, url, kwargs):
+        results = await self._client.get(url, **kwargs)
+        self._content_range = parse_content_range(
+            self._client.response.headers.get('Content-Range'),
+        )
+        return results
+
+    async def _fetch_all(self):
+        if self._results is None:
+            self._results = [result async for result in self._iterator()]
+
+    def _copy(self):
+        rs = AsyncResourceSet(self._client, self._path, self._query)
+        rs._limit = self._limit
+        rs._offset = self._offset
+        rs._slice = self._slice
+        rs._fields = self._fields
+        rs._search = self._search
+        rs._select = copy.copy(self._select)
+        rs._ordering = copy.copy(self._ordering)
+        rs._config = copy.deepcopy(self._config)
+
+        return rs
+
+
+class ResourceSet(ResourceSetBase, ResourceSetMixin):
+    pass
+
+
+class AsyncResourceSet(ResourceSetBase, AsyncResourceSetMixin):
+    pass

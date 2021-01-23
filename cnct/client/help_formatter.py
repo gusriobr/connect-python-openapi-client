@@ -1,7 +1,18 @@
 import inflect
 
 from cmr import render
-from cnct.client.models import Action, Collection, NS, Resource, ResourceSet
+from cnct.client.models import (
+    AsyncAction,
+    AsyncCollection,
+    AsyncNS,
+    AsyncResource,
+    AsyncResourceSet,
+    Action,
+    Collection,
+    NS,
+    Resource,
+    ResourceSet,
+)
 
 
 _COL_HTTP_METHOD_TO_METHOD = {
@@ -180,19 +191,19 @@ class DefaultFormatter:
         if not self._specs:
             return render('**No OpenAPI specs available.**')
 
-        if isinstance(obj, NS):
+        if isinstance(obj, (NS, AsyncNS)):
             return self.format_ns(obj)
 
-        if isinstance(obj, Collection):
+        if isinstance(obj, (Collection, AsyncCollection)):
             return self.format_collection(obj)
 
-        if isinstance(obj, Resource):
+        if isinstance(obj, (Resource, AsyncResource)):
             return self.format_resource(obj)
 
-        if isinstance(obj, Action):
+        if isinstance(obj, (Action, AsyncAction)):
             return self.format_action(obj)
 
-        if isinstance(obj, ResourceSet):
+        if isinstance(obj, (ResourceSet, AsyncResourceSet)):
             return self.format_resource_set(obj)
 
         return self.format_client()

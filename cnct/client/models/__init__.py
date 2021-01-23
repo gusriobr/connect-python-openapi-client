@@ -1,2 +1,12 @@
-from cnct.client.models.base import Action, Collection, NS, Resource  # noqa
-from cnct.client.models.resourceset import ResourceSet  # noqa
+from cnct.client.models.base import (  # noqa
+    AsyncAction,
+    AsyncCollection,
+    AsyncNS,
+    AsyncResource,
+    Action,
+    Collection,
+    NS,
+    Resource,
+
+)
+from cnct.client.models.resourceset import AsyncResourceSet, ResourceSet  # noqa

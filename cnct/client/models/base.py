@@ -1,10 +1,105 @@
 from cnct.client.exceptions import ClientError
-from cnct.client.models.resourceset import ResourceSet
+from cnct.client.models.resourceset import AsyncResourceSet, ResourceSet
 from cnct.client.utils import resolve_attribute
 from cnct.rql import R
 
 
-class NS:
+class NSMixin:
+    def ns(self, name):
+        """
+        Returns the namespace called ``name``.
+
+        :param name: The name of the namespace.
+        :type name: str
+        :raises TypeError: if the ``name`` is not a string.
+        :raises ValueError: if the ``name`` is blank.
+        :return: The namespace called ``name``.
+        :rtype: NS
+        """
+        if not isinstance(name, str):
+            raise TypeError('`name` must be a string.')
+
+        if not name:
+            raise ValueError('`name` must not be blank.')
+
+        return NS(
+            self._client,
+            f'{self._path}/{name}',
+        )
+
+    def collection(self, name):
+        """
+        Returns the collection called ``name``.
+
+        :param name: The name of the collection.
+        :type name: str
+        :raises TypeError: if the ``name`` is not a string.
+        :raises ValueError: if the ``name`` is blank.
+        :raises NotFoundError: if the ``name`` does not exist.
+        :return: The collection called ``name``.
+        :rtype: Collection
+        """
+        if not isinstance(name, str):
+            raise TypeError('`name` must be a string.')
+
+        if not name:
+            raise ValueError('`name` must not be blank.')
+
+        return Collection(
+            self._client,
+            f'{self._path}/{name}',
+        )
+
+
+class AsyncNSMixin:
+
+    def ns(self, name):
+        """
+        Returns the namespace called ``name``.
+
+        :param name: The name of the namespace.
+        :type name: str
+        :raises TypeError: if the ``name`` is not a string.
+        :raises ValueError: if the ``name`` is blank.
+        :return: The namespace called ``name``.
+        :rtype: NS
+        """
+        if not isinstance(name, str):
+            raise TypeError('`name` must be a string.')
+
+        if not name:
+            raise ValueError('`name` must not be blank.')
+
+        return AsyncNS(
+            self._client,
+            f'{self._path}/{name}',
+        )
+
+    def collection(self, name):
+        """
+        Returns the collection called ``name``.
+
+        :param name: The name of the collection.
+        :type name: str
+        :raises TypeError: if the ``name`` is not a string.
+        :raises ValueError: if the ``name`` is blank.
+        :raises NotFoundError: if the ``name`` does not exist.
+        :return: The collection called ``name``.
+        :rtype: Collection
+        """
+        if not isinstance(name, str):
+            raise TypeError('`name` must be a string.')
+
+        if not name:
+            raise ValueError('`name` must not be blank.')
+
+        return AsyncCollection(
+            self._client,
+            f'{self._path}/{name}',
+        )
+
+
+class NSBase:
     """
     A namespace is a group of related collections.
     """
@@ -43,51 +138,6 @@ class NS:
     def __call__(self, name):
         return self.ns(name)
 
-    def collection(self, name):
-        """
-        Returns the collection called ``name``.
-
-        :param name: The name of the collection.
-        :type name: str
-        :raises TypeError: if the ``name`` is not a string.
-        :raises ValueError: if the ``name`` is blank.
-        :raises NotFoundError: if the ``name`` does not exist.
-        :return: The collection called ``name``.
-        :rtype: Collection
-        """
-        if not isinstance(name, str):
-            raise TypeError('`name` must be a string.')
-
-        if not name:
-            raise ValueError('`name` must not be blank.')
-
-        return Collection(
-            self._client,
-            f'{self._path}/{name}',
-        )
-
-    def ns(self, name):
-        """
-        Returns the namespace called ``name``.
-
-        :param name: The name of the namespace.
-        :type name: str
-        :raises TypeError: if the ``name`` is not a string.
-        :raises ValueError: if the ``name`` is blank.
-        :return: The namespace called ``name``.
-        :rtype: NS
-        """
-        if not isinstance(name, str):
-            raise TypeError('`name` must be a string.')
-
-        if not name:
-            raise ValueError('`name` must not be blank.')
-
-        return NS(
-            self._client,
-            f'{self._path}/{name}',
-        )
-
     def help(self):
         """
         Output the namespace documentation to the console.
@@ -99,7 +149,15 @@ class NS:
         return self
 
 
-class Collection:
+class NS(NSBase, NSMixin):
+    pass
+
+
+class AsyncNS(NSBase, AsyncNSMixin):
+    pass
+
+
+class CollectionBase:
     """
     A collection is a group of operations on a resource.
     """
@@ -133,6 +191,19 @@ class Collection:
         :rtype: Resource
         """
         return self.resource(resource_id)
+
+    def help(self):
+        """
+        Output the collection documentation to the console.
+
+        :return: self
+        :rtype: Collection
+        """
+        self._client.print_help(self)
+        return self
+
+
+class CollectionMixin:
 
     def all(self):
         """
@@ -239,18 +310,124 @@ class Collection:
             f'{self._path}/{resource_id}',
         )
 
-    def help(self):
+
+class AsyncCollectionMixin:
+
+    def all(self):
         """
-        Output the collection documentation to the console.
+        Return a ResourceSet instance.
 
-        :return: self
-        :rtype: Collection
+        :return: a ResourceSet instance.
+        :rtype: ResourceSet
         """
-        self._client.print_help(self)
-        return self
+        return AsyncResourceSet(
+            self._client,
+            self._path,
+        )
+
+    def filter(self, *args, **kwargs):
+        """
+        Returns a ResourceSet object.
+        The returned ResourceSet object will be filtered based on
+        the arguments and keyword arguments.
+
+        Arguments can be RQL filter expressions as strings
+        or R objects.
+
+        Ex.
+
+        .. code-block:: python
+
+            rs = collection.filter('eq(field,value)', 'eq(another.field,value2)')
+            rs = collection.filter(R().field.eq('value'), R().another.field.eq('value2'))
+
+        All the arguments will be combined with logical ``and``.
+
+        Filters can be also specified as keyword argument using the ``__`` (double underscore)
+        notation.
+
+        Ex.
+
+        .. code-block:: python
+
+            rs = collection.filter(
+                field=value,
+                another__field=value,
+                field2__in=('a', 'b'),
+                field3__null=True,
+            )
+
+        Also keyword arguments will be combined with logical ``and``.
 
 
-class Resource:
+        :raises TypeError: If arguments are neither strings nor R objects.
+        :return: A ResourceSet with the filters applied.
+        :rtype: ResourceSet
+        """
+        query = R()
+        for arg in args:
+            if isinstance(arg, str):
+                query &= R(_expr=arg)
+                continue
+            if isinstance(arg, R):
+                query &= arg
+                continue
+            raise TypeError(f'arguments must be string or R not {type(arg)}')
+
+        if kwargs:
+            query &= R(**kwargs)
+
+        return AsyncResourceSet(
+            self._client,
+            self._path,
+            query=query,
+        )
+
+    async def create(self, payload=None, **kwargs):
+        """
+        Create a new resource within this collection.
+
+        :param payload: JSON payload of the resource to create, defaults to None.
+        :type payload: dict, optional
+        :return: The newly created resource.
+        :rtype: dict
+        """
+        return await self._client.create(
+            self._path,
+            payload=payload,
+            **kwargs,
+        )
+
+    def resource(self, resource_id):
+        """
+        Returns an Resource object.
+
+        :param resource_id: The resource identifier.
+        :type resource_id: str, int
+        :return: The Resource identified by ``resource_id``.
+        :rtype: Resource
+        """
+        if not isinstance(resource_id, (str, int)):
+            raise TypeError('`resource_id` must be a string or int.')
+
+        if not resource_id:
+            raise ValueError('`resource_id` must not be blank.')
+
+        return AsyncResource(
+            self._client,
+            f'{self._path}/{resource_id}',
+        )
+
+
+class Collection(CollectionBase, CollectionMixin):
+    pass
+
+
+class AsyncCollection(CollectionBase, AsyncCollectionMixin):
+    pass
+
+
+class ResourceBase:
     """Represent a generic resource."""
     def __init__(self, client, path):
         """
@@ -286,6 +463,18 @@ class Resource:
     def __call__(self, name):
         return self.action(name)
 
+    def help(self):
+        """
+        Output the resource documentation to the console.
+
+        :return: self
+        :rtype: Resource
+        """
+        self._client.print_help(self)
+        return self
+
+
+class ResourceMixin:
     def collection(self, name):
         """
         Returns the collection called ``name``.
@@ -403,18 +592,135 @@ class Resource:
             results[field] = resolve_attribute(field, item)
         return results
 
-    def help(self):
+
+class AsyncResourceMixin:
+    def collection(self, name):
         """
-        Output the resource documentation to the console.
+        Returns the collection called ``name``.
 
-        :return: self
-        :rtype: Resource
+        :param name: The name of the collection.
+        :type name: str
+        :raises TypeError: if the ``name`` is not a string.
+        :raises ValueError: if the ``name`` is blank.
+        :raises NotFoundError: if the ``name`` does not exist.
+        :return: The collection called ``name``.
+        :rtype: Collection
         """
-        self._client.print_help(self)
-        return self
+        if not isinstance(name, str):
+            raise TypeError('`name` must be a string.')
+
+        if not name:
+            raise ValueError('`name` must not be blank.')
+
+        return AsyncCollection(
+            self._client,
+            f'{self._path}/{name}',
+        )
+
+    def action(self, name):
+        """
+        Returns the action called ``name``.
+
+        :param name: The name of the action.
+        :type name: str
+        :raises TypeError: if the ``name`` is not a string.
+        :raises ValueError: if the ``name`` is blank.
+        :raises NotFoundError: if the ``name`` does not exist.
+        :return: The action called ``name``.
+        :rtype: Action
+        """
+        if not isinstance(name, str):
+            raise TypeError('`name` must be a string.')
+
+        if not name:
+            raise ValueError('`name` must not be blank.')
+
+        return AsyncAction(
+            self._client,
+            f'{self._path}/{name}',
+        )
+
+    async def exists(self):
+        try:
+            await self.get()
+            return True
+        except ClientError as ce:
+            if ce.status_code and ce.status_code == 404:
+                return False
+            raise
+
+    async def get(self, **kwargs):
+        """
+        Execute a http GET to retrieve this resource.
+        The http GET can be customized passing kwargs that
+        will be forwarded to the underlying GET of the ``requests``
+        library.
+
+        :return: The resource data.
+        :rtype: dict
+        """
+        return await self._client.get(self._path, **kwargs)
+
+    async def update(self, payload=None, **kwargs):
+        """
+        Execute a http PUT to update this resource.
+        The http PUT can be customized passing kwargs that
+        will be forwarded to the underlying PUT of the ``requests``
+        library.
+
+        :param payload: the JSON payload of the update request, defaults to None
+        :type payload: dict, optional
+        :return: The updated resource.
+        :rtype: dict
+        """
+        return await self._client.update(
+            self._path,
+            payload=payload,
+            **kwargs,
+        )
+
+    async def delete(self, **kwargs):
+        """
+        Execute a http DELETE to delete this resource.
+        The http DELETE can be customized passing kwargs that
+        will be forwarded to the underlying DELETE of the ``requests``
+        library.
+        """
+        return await self._client.delete(
+            self._path,
+            **kwargs,
+        )
+
+    async def values(self, *fields):
+        """
+        Returns a flat dictionary containing only the fields passed as arguments.
+        Nested field can be specified using dot notation.
+
+        Ex.
+
+        .. code-block:: python
+
+        values = resource.values('field', 'nested.field')
+
+        :return: A dictionary containing field,value pairs.
+        :rtype: dict
+        """
+        results = {}
+        item = await self.get()
+        for field in fields:
+            results[field] = resolve_attribute(field, item)
+        return results
 
 
-class Action:
+class Resource(ResourceBase, ResourceMixin):
+    pass
+
+
+class AsyncResource(ResourceBase, AsyncResourceMixin):
+    pass
+
+
+class ActionBase:
     """
     This class represent an action that can be executed on a resource.
     """
@@ -436,6 +742,18 @@ class Action:
     def path(self):
         return self._path
 
+    def help(self):
+        """
+        Output the action documentation to the console.
+
+        :return: self
+        :rtype: Action
+        """
+        self._client.print_help(self)
+        return self
+
+
+class ActionMixin:
     def get(self, **kwargs):
         """
         Execute this action through a http GET.
@@ -500,12 +818,76 @@ class Action:
             **kwargs,
         )
 
-    def help(self):
-        """
-        Output the action documentation to the console.
 
-        :return: self
-        :rtype: Action
+class AsyncActionMixin:
+    async def get(self, **kwargs):
         """
-        self._client.print_help(self)
-        return self
+        Execute this action through a http GET.
+        The http GET can be customized passing kwargs that
+        will be forwarded to the underlying GET of the ``requests``
+        library.
+
+        :return: The action data.
+        :rtype: dict, None
+        """
+        return await self._client.get(self._path, **kwargs)
+
+    async def post(self, payload=None, **kwargs):
+        """
+        Execute this action through a http POST.
+        The http POST can be customized passing kwargs that
+        will be forwarded to the underlying PUT of the ``requests``
+        library.
+
+        :param payload: the JSON payload for this action, defaults to None
+        :type payload: dict, optional
+        :return: The result of this action.
+        :rtype: dict, None
+        """
+        if payload:
+            kwargs['json'] = payload
+        return await self._client.execute(
+            'post',
+            self._path,
+            **kwargs,
+        )
+
+    async def put(self, payload=None, **kwargs):
+        """
+        Execute this action through a http PUT.
+        The http PUT can be customized passing kwargs that
+        will be forwarded to the underlying PUT of the ``requests``
+        library.
+
+        :param payload: the JSON payload for this action, defaults to None
+        :type payload: dict, optional
+        :return: The result of this action.
+        :rtype: dict, None
+        """
+        if payload:
+            kwargs['json'] = payload
+        return await self._client.execute(
+            'put',
+            self._path,
+            **kwargs,
+        )
+
+    async def delete(self, **kwargs):
+        """
+        Execute this action through a http DELETE.
+        The http DELETE can be customized passing kwargs that
+        will be forwarded to the underlying DELETE of the ``requests``
+        library.
+        """
+        return await self._client.delete(
+            self._path,
+            **kwargs,
+        )
+
+
+class Action(ActionBase, ActionMixin):
+    pass
+
+
+class AsyncAction(ActionBase, AsyncActionMixin):
+    pass
