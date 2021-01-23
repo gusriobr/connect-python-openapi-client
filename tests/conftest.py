@@ -1,3 +1,4 @@
+import asynctest
 import pytest
 
 import responses
@@ -22,3 +23,8 @@ def mocked_responses():
 @pytest.fixture(scope='session')
 def openapi_specs():
     return OpenAPISpecs('tests/data/specs.yml')
+
+
+@pytest.fixture
+def async_mocker():
+    return asynctest

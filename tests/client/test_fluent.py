@@ -3,12 +3,13 @@ import pytest
 import responses
 
 from cnct.client.exceptions import ClientError
-from cnct.client.fluent import ConnectClient
-from cnct.client.models import Collection, NS
+from cnct.client.fluent import AsyncConnectClient, ConnectClient
+from cnct.client.models import AsyncCollection, AsyncNS, Collection, NS
 
 
-def test_default_headers():
-    c = ConnectClient(
+@pytest.mark.parametrize('clazz', (AsyncConnectClient, ConnectClient))
+def test_default_headers(clazz):
+    c = clazz(
         'Api Key',
         use_specs=False,
         default_headers={'X-Custom-Header': 'value'},
@@ -17,112 +18,97 @@ def test_default_headers():
     assert c.default_headers == {'X-Custom-Header': 'value'}
 
 
-def test_default_headers_invalid():
+@pytest.mark.parametrize('clazz', (AsyncConnectClient, ConnectClient))
+def test_default_headers_invalid(clazz):
     with pytest.raises(ValueError):
-        ConnectClient(
+        clazz(
             'Api Key',
             use_specs=False,
             default_headers={'Authorization': 'value'},
         )
 
 
-# def test_getattr(mocker):
-#     c = ConnectClient('Api Key', use_specs=False)
-
-#     with pytest.raises(AttributeError) as cv:
-#         c.resources
-
-#     assert str(cv.value) == (
-#         'No specs available. Use `ns` '
-#         'or `collection` methods instead.'
-#     )
-
-
-# def test_getattr_with_specs_dash(mocker, apiinfo_factory, nsinfo_factory, colinfo_factory):
-#     specs = apiinfo_factory(
-#         collections=[colinfo_factory(name='my-resources')],
-#         namespaces=[nsinfo_factory(name='name-space')],
-#     )
-#     mocker.patch(
-#         'cnct.client.fluent.parse',
-#         return_value=specs,
-#     )
-
-#     c = ConnectClient('Api Key')
-
-#     assert isinstance(c.my_resources, Collection)
-#     assert isinstance(c.name_space, NS)
-
-#     specs = apiinfo_factory(
-#         collections=[colinfo_factory('resources')],
-#         namespaces=[nsinfo_factory('namespace')],
-#     )
-#     mocker.patch(
-#         'cnct.client.fluent.parse',
-#         return_value=specs,
-#     )
-
-#     c = ConnectClient('Api Key')
-
-#     assert isinstance(c.resources, Collection)
-#     assert isinstance(c.namespace, NS)
+@pytest.mark.parametrize(
+    ('client_clazz', 'expected_collection_model'),
+    (
+        (AsyncConnectClient, AsyncCollection),
+        (ConnectClient, Collection),
+    ),
+)
+def test_getattr(client_clazz, expected_collection_model):
+    c = client_clazz('Api Key', use_specs=False)
+    res = c.products
+    assert isinstance(res, expected_collection_model)
+    assert res.path == 'products'
 
 
-# def test_getattr_with_specs_unresolved(mocker, apiinfo_factory, nsinfo_factory, colinfo_factory):
-#     specs = apiinfo_factory(
-#         collections=[colinfo_factory(name='resources')],
-#         namespaces=[nsinfo_factory(name='namespace')],
-#     )
-#     mocker.patch(
-#         'cnct.client.fluent.parse',
-#         return_value=specs,
-#     )
+@pytest.mark.parametrize(
+    ('client_clazz', 'expected_collection_model'),
+    (
+        (AsyncConnectClient, AsyncCollection),
+        (ConnectClient, Collection),
+    ),
+)
+def test_getattr_with_dash(client_clazz, expected_collection_model):
 
-#     c = ConnectClient('Api Key')
+    c = client_clazz('Api Key', use_specs=False)
 
-#     with pytest.raises(AttributeError) as cv:
-#         c.others
-
-#     assert str(cv.value) == 'Unable to resolve others.'
+    assert isinstance(c.my_resources, expected_collection_model)
+    assert c.my_resources.path == 'my-resources'
 
 
-def test_ns(mocker):
-    # mocker.patch(
-    #     'cnct.client.fluent.parse',
-    #     return_value=None,
-    # )
+@pytest.mark.parametrize(
+    ('client_clazz', 'expected_ns_model'),
+    (
+        (AsyncConnectClient, AsyncNS),
+        (ConnectClient, NS),
+    ),
+)
+def test_ns(client_clazz, expected_ns_model):
+    c = client_clazz('Api Key', use_specs=False)
 
-    c = ConnectClient('Api Key', use_specs=False)
+    assert isinstance(c.ns('namespace'), expected_ns_model)
+    assert c.ns('namespace').path == 'namespace'
 
-    assert isinstance(c.ns('namespace'), NS)
 
-
-def test_ns_invalid_type():
-    c = ConnectClient('Api Key', use_specs=False)
+@pytest.mark.parametrize('clazz', (AsyncConnectClient, ConnectClient))
+def test_ns_invalid_type(clazz):
+    c = clazz('Api Key', use_specs=False)
     with pytest.raises(TypeError):
         c.ns(c)
 
 
-def test_ns_invalid_value():
-    c = ConnectClient('Api Key', use_specs=False)
+@pytest.mark.parametrize('clazz', (AsyncConnectClient, ConnectClient))
+def test_ns_invalid_value(clazz):
+    c = clazz('Api Key', use_specs=False)
     with pytest.raises(ValueError):
         c.ns('')
 
 
-def test_collection(mocker):
-    c = ConnectClient('Api Key', use_specs=False)
+@pytest.mark.parametrize(
+    ('client_clazz', 'expected_collection_model'),
+    (
+        (AsyncConnectClient, AsyncCollection),
+        (ConnectClient, Collection),
+    ),
+)
+def test_collection(client_clazz, expected_collection_model):
+    c = client_clazz('Api Key', use_specs=False)
 
-    assert isinstance(c.collection('resources'), Collection)
+    assert isinstance(c.collection('resources'), expected_collection_model)
+    assert c.collection('resources').path == 'resources'
 
 
-def test_collection_invalid_type():
-    c = ConnectClient('Api Key', use_specs=False)
+@pytest.mark.parametrize('clazz', (AsyncConnectClient, ConnectClient))
+def test_collection_invalid_type(clazz):
+    c = clazz('Api Key', use_specs=False)
     with pytest.raises(TypeError):
         c.collection(c)
 
 
-def test_collection_invalid_value():
-    c = ConnectClient('Api Key', use_specs=False)
+@pytest.mark.parametrize('clazz', (AsyncConnectClient, ConnectClient))
+def test_collection_invalid_value(clazz):
+    c = clazz('Api Key', use_specs=False)
     with pytest.raises(ValueError):
         c.collection('')
 
@@ -141,6 +127,18 @@ def test_get(mocker):
     assert mocked.called_once_with('get', url, 200, **kwargs)
 
 
+@pytest.mark.asyncio
+async def test_async_get(async_mocker):
+    url = 'https://localhost'
+    kwargs = {
+        'arg1': 'val1',
+    }
+    with async_mocker.patch.object(AsyncConnectClient, 'execute') as mocked:
+        c = AsyncConnectClient('API_KEY', use_specs=False)
+        await c.get(url, **kwargs)
+    mocked.assert_awaited_once_with('get', url, **kwargs)
+
+
 def test_create(mocker):
     mocked = mocker.patch.object(ConnectClient, 'execute')
     url = 'https://localhost'
@@ -156,6 +154,29 @@ def test_create(mocker):
     c.create(url, payload=payload, **kwargs)
 
     mocked.assert_called_once_with('post', url, **{
+        'arg1': 'val1',
+        'json': {
+            'k1': 'v1',
+        },
+    })
+
+
+@pytest.mark.asyncio
+async def test_async_create(async_mocker):
+
+    url = 'https://localhost'
+    payload = {
+        'k1': 'v1',
+    }
+    kwargs = {
+        'arg1': 'val1',
+    }
+
+    with async_mocker.patch.object(AsyncConnectClient, 'execute') as mocked:
+        c = AsyncConnectClient('API_KEY', use_specs=False)
+        await c.create(url, payload=payload, **kwargs)
+
+    mocked.assert_awaited_once_with('post', url, **{
         'arg1': 'val1',
         'json': {
             'k1': 'v1',
@@ -185,6 +206,29 @@ def test_update(mocker):
     })
 
 
+@pytest.mark.asyncio
+async def test_async_update(async_mocker):
+
+    url = 'https://localhost'
+    payload = {
+        'k1': 'v1',
+    }
+    kwargs = {
+        'arg1': 'val1',
+    }
+
+    with async_mocker.patch.object(AsyncConnectClient, 'execute') as mocked:
+        c = AsyncConnectClient('API_KEY', use_specs=False)
+        await c.update(url, payload=payload, **kwargs)
+
+    mocked.assert_awaited_once_with('put', url, **{
+        'arg1': 'val1',
+        'json': {
+            'k1': 'v1',
+        },
+    })
+
+
 def test_delete(mocker):
     mocked = mocker.patch.object(ConnectClient, 'execute')
     url = 'https://localhost'
@@ -198,6 +242,23 @@ def test_delete(mocker):
     c.delete(url, **kwargs)
 
     mocked.assert_called_once_with('delete', url, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_async_delete(async_mocker):
+
+    url = 'https://localhost'
+    kwargs = {
+        'arg1': 'val1',
+    }
+
+    with async_mocker.patch.object(AsyncConnectClient, 'execute') as mocked:
+        c = AsyncConnectClient('API_KEY', use_specs=False)
+        await c.delete(url, **kwargs)
+
+    mocked.assert_awaited_once_with('delete', url, **{
+        'arg1': 'val1',
+    })
 
 
 def test_execute(mocked_responses):
@@ -214,6 +275,30 @@ def test_execute(mocked_responses):
 
     assert mocked_responses.calls[0].request.method == 'GET'
     headers = mocked_responses.calls[0].request.headers
+
+    assert 'Authorization' in headers and headers['Authorization'] == 'API_KEY'
+    assert 'User-Agent' in headers and headers['User-Agent'].startswith('connect-fluent')
+
+    assert results == expected
+
+
+@pytest.mark.asyncio
+async def test_async_execute(httpx_mock):
+    expected = [{'id': i} for i in range(10)]
+    httpx_mock.add_response(
+        method='GET',
+        url='https://localhost/resources',
+        json=expected,
+        status_code=200,
+    )
+
+    c = AsyncConnectClient('API_KEY', endpoint='https://localhost', use_specs=False)
+
+    results = await c.execute('get', 'resources')
+
+    requests = httpx_mock.get_requests()
+    assert requests[0].method == 'GET'
+    headers = requests[0].headers
 
     assert 'Authorization' in headers and headers['Authorization'] == 'API_KEY'
     assert 'User-Agent' in headers and headers['User-Agent'].startswith('connect-fluent')
@@ -238,6 +323,31 @@ def test_execute_default_headers(mocked_responses):
     c.execute('get', 'resources')
 
     headers = mocked_responses.calls[0].request.headers
+
+    assert 'Authorization' in headers and headers['Authorization'] == 'API_KEY'
+    assert 'User-Agent' in headers and headers['User-Agent'].startswith('connect-fluent')
+    assert 'X-Custom-Header' in headers and headers['X-Custom-Header'] == 'custom-header-value'
+
+
+@pytest.mark.asyncio
+async def test_async_execute_default_headers(httpx_mock):
+    httpx_mock.add_response(
+        method='GET',
+        url='https://localhost/resources',
+        json=[],
+        status_code=200,
+    )
+
+    c = AsyncConnectClient(
+        'API_KEY',
+        endpoint='https://localhost',
+        use_specs=False,
+        default_headers={'X-Custom-Header': 'custom-header-value'},
+    )
+
+    await c.execute('get', 'resources')
+
+    headers = httpx_mock.get_requests()[0].headers
 
     assert 'Authorization' in headers and headers['Authorization'] == 'API_KEY'
     assert 'User-Agent' in headers and headers['User-Agent'].startswith('connect-fluent')
@@ -270,6 +380,33 @@ def test_execute_with_kwargs(mocked_responses):
     assert 'X-Custom-Header' in headers and headers['X-Custom-Header'] == 'value'
 
 
+@pytest.mark.asyncio
+async def test_async_execute_with_kwargs(httpx_mock):
+    httpx_mock.add_response(
+        method='POST',
+        url='https://localhost/resources',
+        json=[],
+        status_code=201,
+    )
+
+    c = AsyncConnectClient('API_KEY', endpoint='https://localhost', use_specs=False)
+    kwargs = {
+        'headers': {
+            'X-Custom-Header': 'value',
+        },
+    }
+
+    await c.execute('post', 'resources', **kwargs)
+
+    assert httpx_mock.get_requests()[0].method == 'POST'
+
+    headers = httpx_mock.get_requests()[0].headers
+
+    assert 'Authorization' in headers and headers['Authorization'] == 'API_KEY'
+    assert 'User-Agent' in headers and headers['User-Agent'].startswith('connect-fluent')
+    assert 'X-Custom-Header' in headers and headers['X-Custom-Header'] == 'value'
+
+
 def test_execute_connect_error(mocked_responses):
     connect_error = {
         'error_code': 'code',
@@ -293,6 +430,30 @@ def test_execute_connect_error(mocked_responses):
     assert cv.value.errors == ['first', 'second']
 
 
+@pytest.mark.asyncio
+async def test_async_execute_connect_error(httpx_mock):
+    connect_error = {
+        'error_code': 'code',
+        'errors': ['first', 'second'],
+    }
+
+    httpx_mock.add_response(
+        method='POST',
+        url='https://localhost/resources',
+        json=connect_error,
+        status_code=400,
+    )
+
+    c = AsyncConnectClient('API_KEY', endpoint='https://localhost', use_specs=False)
+
+    with pytest.raises(ClientError) as cv:
+        await c.execute('post', 'resources')
+
+    assert cv.value.status_code == 400
+    assert cv.value.error_code == 'code'
+    assert cv.value.errors == ['first', 'second']
+
+
 def test_execute_uparseable_connect_error(mocked_responses):
 
     mocked_responses.add(
@@ -306,6 +467,22 @@ def test_execute_uparseable_connect_error(mocked_responses):
 
     with pytest.raises(ClientError):
         c.execute('post', 'resources')
+
+
+@pytest.mark.asyncio
+async def test_async_execute_uparseable_connect_error(httpx_mock):
+
+    httpx_mock.add_response(
+        method='POST',
+        url='https://localhost/resources',
+        data=b'error text',
+        status_code=400,
+    )
+
+    c = AsyncConnectClient('API_KEY', endpoint='https://localhost', use_specs=False)
+
+    with pytest.raises(ClientError):
+        await c.execute('post', 'resources')
 
 
 @pytest.mark.parametrize('encoding', ('utf-8', 'iso-8859-1'))
