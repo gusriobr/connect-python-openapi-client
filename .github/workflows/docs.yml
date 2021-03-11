@@ -31,7 +31,7 @@ jobs:
       run: |
         git config --local user.name "Github actions docs bot"
         git config --local user.email "bot@github.com"
-        git add docs/_build/markdown
+        git add -f docs/_build/markdown
         git commit -am 'Docs generated'
     - name: Push changes
       uses: ad-m/github-push-action@master
