@@ -5,7 +5,7 @@ on:
     branches-ignore: 'docs/test_gh_actions'
 
 jobs:
-  deploy:
+  mddocs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -24,7 +24,7 @@ jobs:
     - name: Build markdown docs
       run: |
         cd docs
-        make markdown
+        poetry run sphinx-build -M markdown ./ build
     - name: Commit docs to docs branch
       run: |
         git config --local user.name "Github actions docs bot"
