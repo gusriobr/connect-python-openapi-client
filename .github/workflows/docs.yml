@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
@@ -24,7 +26,7 @@ jobs:
     - name: Build markdown docs
       run: |
         cd docs
-        poetry run sphinx-build -M markdown ./ build
+        poetry run sphinx-build -M markdown ./ _build
     - name: Commit docs to docs branch
       run: |
         git config --local user.name "Github actions docs bot"
