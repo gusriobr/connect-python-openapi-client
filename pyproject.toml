@@ -55,6 +55,7 @@ setuptools = "^50.3.2"
 twine = "^3.2.0"
 wheel = "^0.35.1"
 responses = "^0.12.0"
+sphinx-markdown-builder = "^0.5.4"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

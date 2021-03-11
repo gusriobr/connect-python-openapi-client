@@ -1,0 +1,39 @@
+name: Build Docs For Connect Python OpenAPI Client
+
+on:
+  push:
+    branches: '*'
+    branches-ignore: 'docs/test_gh_actions'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install poetry
+        poetry install
+    - name: Create docs branch
+      run: |
+        git checkout -B docs/test_gh_actions
+    - name: Build markdown docs
+      run: |
+        cd docs
+        make markdown
+    - name: Commit docs to docs branch
+      run: |
+        git config --local user.name "Github actions docs bot"
+        git config --local user.email "bot@github.com"
+        git add docs/_build/markdown
+        git commit -am 'Docs generated'
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        branch: docs/test_gh_actions
